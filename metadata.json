@@ -1,0 +1,6 @@
+{
+  "name": "SGFP - Dashboard Financeiro",
+  "description": "Sistema de Gestão Financeira Pessoal com regra de orçamento 50/30/20, gráficos de fluxo de caixa em Recharts e transações customizáveis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

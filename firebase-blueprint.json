@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "userSettings": {
+      "title": "UserSettings",
+      "description": "User specific budget rules, overrides, and category preferences",
+      "type": "object",
+      "properties": {
+        "budgetRule": {
+          "type": "object",
+          "description": "User's customized 50-30-20 rule config"
+        },
+        "receitasOverrides": {
+          "type": "object",
+          "description": "Manual monthly income values overrides"
+        },
+        "customMacrosDespesa": {
+          "type": "array",
+          "description": "Custom macro categories for expenses"
+        },
+        "customMacrosReceita": {
+          "type": "array",
+          "description": "Custom macro categories for income"
+        },
+        "customMicroPresets": {
+          "type": "object",
+          "description": "Custom micro categories for and under macros"
+        }
+      },
+      "required": ["budgetRule", "receitasOverrides", "customMacrosDespesa", "customMacrosReceita", "customMicroPresets"]
+    },
+    "transaction": {
+      "title": "Transaction",
+      "description": "A single financial transaction (expense or income)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["Receita", "Despesa"] },
+        "macro": { "type": "string" },
+        "micro": { "type": "string" },
+        "desc": { "type": "string" },
+        "amount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "date", "type", "macro", "micro", "desc", "amount", "createdAt", "updatedAt"]
+    },
+    "savingsGoal": {
+      "title": "SavingsGoal",
+      "description": "A financial savings goal or dream target",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadline": { "type": "string" },
+        "category": { "type": "string", "enum": ["reserva", "viagem", "compras", "estudos", "casa", "outro"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "targetAmount", "currentAmount", "category", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "userSettings",
+      "description": "Global customization and config document for a user"
+    },
+    "users/{userId}/transactions/{transactionId}": {
+      "schema": "transaction",
+      "description": "User's financial transactions"
+    },
+    "users/{userId}/savings_goals/{goalId}": {
+      "schema": "savingsGoal",
+      "description": "User's financial savings goals"
+    }
+  }
+}

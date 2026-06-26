@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net Case
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Reusable Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isEmailVerified() && request.auth.uid == userId;
+    }
+
+    // Alphanum, dash, underscore, dot are allowed in user ids or transaction ids
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    // 2. Validation Helper for UserSettings Entity
+    function isValidUserSettings(data) {
+      return data.keys().hasAll(['budgetRule', 'receitasOverrides', 'customMacrosDespesa', 'customMacrosReceita', 'customMicroPresets'])
+        && data.keys().size() == 5;
+    }
+
+    // 2. Validation Helper for Transaction Entity
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'date', 'type', 'macro', 'micro', 'desc', 'amount', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 9
+        && data.id is string && data.id.size() <= 128
+        && data.date is string && data.date.size() == 10
+        && data.type is string && (data.type == 'Receita' || data.type == 'Despesa')
+        && data.macro is string && data.macro.size() <= 128
+        && data.micro is string && data.micro.size() <= 128
+        && data.desc is string && data.desc.size() <= 256
+        && (data.amount is number || data.amount is float) && data.amount > 0;
+    }
+
+    // Validation Helper for SavingsGoal Entity
+    function isValidSavingGoal(data) {
+      return data.keys().hasAll(['title', 'targetAmount', 'currentAmount', 'category', 'createdAt'])
+        && data.keys().size() >= 5 && data.keys().size() <= 6
+        && data.title is string && data.title.size() <= 128
+        && (data.targetAmount is number || data.targetAmount is float) && data.targetAmount > 0
+        && (data.currentAmount is number || data.currentAmount is float) && data.currentAmount >= 0
+        && data.category is string && (data.category == 'reserva' || data.category == 'viagem' || data.category == 'compras' || data.category == 'estudos' || data.category == 'casa' || data.category == 'outro')
+        && (!('deadline' in data) || data.deadline == null || (data.deadline is string && data.deadline.size() == 10));
+    }
+
+    // --- Users Collection & Settings ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserSettings(request.resource.data);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserSettings(request.resource.data);
+      allow delete: if false; // Users settings shouldn't be fully deletable
+    }
+
+    // --- User's Sub-Collection for Transactions ---
+    match /users/{userId}/transactions/{transactionId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+      allow list: if isOwner(userId) && isValidId(userId); // list checks parent userId
+      
+      allow create: if isOwner(userId) 
+        && isValidId(userId) 
+        && isValidId(transactionId) 
+        && isValidTransaction(request.resource.data) 
+        && request.resource.data.createdAt == request.time 
+        && request.resource.data.updatedAt == request.time;
+        
+      allow update: if isOwner(userId) 
+        && isValidId(userId) 
+        && isValidId(transactionId) 
+        && isValidTransaction(request.resource.data) 
+        && request.resource.data.createdAt == resource.data.createdAt 
+        && request.resource.data.updatedAt == request.time 
+        && request.resource.data.id == resource.data.id;
+        
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+    }
+
+    // --- User's Sub-Collection for Savings Goals ---
+    match /users/{userId}/savings_goals/{goalId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(goalId);
+      allow list: if isOwner(userId) && isValidId(userId);
+
+      allow create: if isOwner(userId)
+        && isValidId(userId)
+        && isValidId(goalId)
+        && isValidSavingGoal(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidId(goalId)
+        && isValidSavingGoal(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(goalId);
+    }
+  }
+}

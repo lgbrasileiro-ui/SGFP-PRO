@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net Case
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Reusable Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isEmailVerified() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    // 2. Validation Helper for UserSettings Entity
+    function isValidUserSettings(data) {
+      return data.keys().hasAll(['budgetRule', 'receitasOverrides', 'customMacrosDespesa', 'customMacrosReceita', 'customMicroPresets'])
+        && data.keys().size() == 5;
+    }
+
+    // 2. Validation Helper for Transaction Entity
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'date', 'type', 'macro', 'micro', 'desc', 'amount', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 9
+        && data.id is string && data.id.size() <= 128
+        && data.date is string && data.date.size() == 10
+        && data.type is string && (data.type == 'Receita' || data.type == 'Despesa')
+        && data.macro is string && data.macro.size() <= 128
+        && data.micro is string && data.micro.size() <= 128
+        && data.desc is string && data.desc.size() <= 256
+        && (data.amount is number || data.amount is float) && data.amount > 0;
+    }
+
+    // --- Users Collection & Settings ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserSettings(request.resource.data);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserSettings(request.resource.data);
+      allow delete: if false; // Users settings shouldn't be fully deletable
+    }
+
+    // --- User's Sub-Collection for Transactions ---
+    match /users/{userId}/transactions/{transactionId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+      allow list: if isOwner(userId) && isValidId(userId); // list checks parent userId
+      
+      allow create: if isOwner(userId) 
+        && isValidId(userId) 
+        && isValidId(transactionId) 
+        && isValidTransaction(request.resource.data) 
+        && request.resource.data.createdAt == request.time 
+        && request.resource.data.updatedAt == request.time;
+        
+      allow update: if isOwner(userId) 
+        && isValidId(userId) 
+        && isValidId(transactionId) 
+        && isValidTransaction(request.resource.data) 
+        && request.resource.data.createdAt == resource.data.createdAt 
+        && request.resource.data.updatedAt == request.time 
+        && request.resource.data.id == resource.data.id;
+        
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(transactionId);
+    }
+  }
+}
